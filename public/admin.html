@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Notification Panel | Jinnie Chat</title>
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="login-container" class="login-container">
+    <div class="login-box">
+      <h2>🔐 Admin Login</h2>
+      <p>Enter your admin password to continue.</p>
+      <input type="password" id="admin-password" placeholder="Enter password" />
+      <button id="login-btn" class="btn">Login</button>
+      <div id="login-status" class="status"></div>
+    </div>
+  </div>
+
+  <!-- Admin Dashboard -->
+  <div id="admin-container" class="admin-container hidden">
+    <h1>🔔 Send Push Notification</h1>
+    <p class="subtitle">Send instant updates to all your subscribed users.</p>
+
+    <div class="form-group">
+      <label for="title">Notification Title</label>
+      <input type="text" id="title" placeholder="Enter notification title" required />
+    </div>
+
+    <div class="form-group">
+      <label for="message">Notification Message</label>
+      <textarea id="message" placeholder="Enter message content" rows="4" required></textarea>
+    </div>
+
+    <button id="send-btn" class="btn">🚀 Send Notification</button>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script src="admin.js"></script>  
+  <script src="sw.js"></script>  
+</body>
+</html>

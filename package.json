@@ -1,0 +1,20 @@
+{
+  "name": "jinnie-chat",
+  "version": "1.0.0",
+  "description": "Jinnie Chat - real-time chat with password rooms",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "web-push": "^3.6.7",
+    "express-basic-auth": "^1.2.0",
+    "dotenv": "^16.0.0"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "MIT"
+}

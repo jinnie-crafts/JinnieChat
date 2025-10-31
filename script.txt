@@ -1,0 +1,24 @@
+sendBtn.addEventListener("click", () => {
+  const msg = messageInput.value.trim();
+  if (!msg) return;
+
+  socket.emit("chat message", msg);  // send message
+  messageInput.value = ""; // clear input
+  socket.emit("stop typing", username);
+
+  // keep keyboard open on mobile
+  if (/Mobi|Android/i.test(navigator.userAgent)) {
+    setTimeout(() => messageInput.focus(), 50); // refocus input
+  }
+});
+
+
+
+messageInput.addEventListener("keypress", e => {
+  if (e.key === "Enter") sendBtn.click();
+  else {
+    socket.emit("typing", username);
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => socket.emit("stop typing", username), 900);
+  }
+});

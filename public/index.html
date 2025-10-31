@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jinnie Chat</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="website icon" type="png" href="jinnie-chats.png">
+  <meta name="description" content="Jinnie Chat is a real-time, mobile-friendly chat application with password-protected rooms, file sharing, and instant notifications. Connect with friends anywhere in the world. Developed by: karsh">
+</head>
+<body>
+  <!-- Splash -->
+  <div id="splash-screen">
+    <img id="splash-logo" src="jinnie-chats.png" alt="Jinnie Chat">
+  </div>
+
+  <!-- Username Modal -->
+  <div id="username-modal" class="modal">
+    <div class="modal-card">
+      <h2>Welcome to Jinnie Chat</h2>
+      <p class="muted">Enter your display name to join chats</p>
+      <input id="username-input" type="text" placeholder="Your name" />
+      <button id="username-btn" class="btn primary">Continue</button>
+    </div>
+  </div>
+
+  <!-- Room Modal -->
+  <div id="room-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Create a room or join an existing one</h3>
+
+      <!-- Create -->
+      <div id="create-section" class="room-section">
+        <input id="new-room-input" type="text" placeholder="Room name" />
+        <div class="password-wrapper">
+          <input id="new-room-password" type="password" placeholder="Set room password" />
+          <button class="toggle-eye" onclick="togglePassword('new-room-password')">👁️</button>
+        </div>
+        <button id="new-room-btn" class="btn positive">Create & Join</button>
+      </div>
+
+      <hr />
+
+      <!-- List -->
+      <div>
+        <p class="muted">Existing rooms</p>
+        <ul id="room-list" class="room-list"></ul>
+      </div>
+
+      <!-- Join -->
+      <div id="join-password-container" class="room-section hidden">
+        <p class="muted">Enter password to join</p>
+        <div class="password-wrapper">
+          <input id="join-room-password" type="password" placeholder="Room password" />
+          <button class="toggle-eye" onclick="togglePassword('join-room-password')">👁️</button>
+        </div>
+        <div id="password-alert" class="password-alert hidden">Incorrect password</div>
+        <button id="join-room-btn" class="btn positive">Join Room</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-wrapper hidden">
+
+    <header class="chat-header">
+      <div class="title">Jinnie Chat</div>
+      <div id="chat-subtitle" class="subtitle"></div>
+      <button id="invite-btn" class="invite-btn">➕ Invite</button>
+    </header>
+
+    <div id="status-bar" class="status-bar hidden"></div>
+
+    <main id="chat-body" class="chat-body"></main>
+
+    <div id="typing-indicator" class="typing-indicator hidden">someone is typing...</div>
+
+    <footer class="chat-footer">
+      <input id="message-input" type="text" placeholder="Type a message..." />
+      <div class="chat-actions">
+        <button id="file-btn" class="circle-btn">📎</button>
+        <input id="file-input" type="file" hidden />
+        <button id="send-btn" class="circle-btn">➤</button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Invite Modal -->
+  <div id="inviteModal" class="modal hidden">
+    <div class="modal-card">
+      <button id="close-invite" class="close-btn">✕</button>
+      <h3>Share this link to invite your friend</h3>
+      <input id="invite-url" type="text" readonly />
+      <div style="margin-top:10px">
+        <button id="copy-btn" class="btn">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+  <script src="sw.js"></script>
+</body>
+</html>
