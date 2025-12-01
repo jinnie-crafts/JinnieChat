@@ -1,9 +1,7 @@
-// script.js - client side
+// script.js - client (chat + push)
 const socket = io({ reconnection: true, reconnectionAttempts: Infinity, reconnectionDelay: 1000 });
 
-/* ----------------------
-   Elements
-   ---------------------- */
+// Elements (assuming your HTML uses the same ids)
 const splash = document.getElementById("splash-screen");
 const usernameModal = document.getElementById("username-modal");
 const usernameInput = document.getElementById("username-input");
@@ -42,21 +40,21 @@ const toast = document.getElementById("toast");
 
 let username = null, room = null;
 let typingTimeout = null;
+let hasSubscribedForPush = false;
 
-/* ----------------------
-   Splash
-   ---------------------- */
+/* Splash */
 window.addEventListener("load", () => {
   setTimeout(() => {
-    splash.classList.add("fade-out");
-    setTimeout(() => { splash.style.display = "none"; }, 650);
-  }, 1000);
+    if (splash) {
+      splash.classList.add("fade-out");
+      setTimeout(() => { splash.style.display = "none"; }, 650);
+    }
+  }, 700);
 });
 
-/* ----------------------
-   Utility helpers
-   ---------------------- */
+/* Utilities */
 function showToast(msg, time = 1400) {
+  if (!toast) return;
   toast.textContent = msg;
   toast.classList.add("show", "visible");
   setTimeout(() => {
@@ -79,23 +77,29 @@ function adjustChatPadding() {
   if (!footer || !chatBody) return;
   const h = footer.offsetHeight;
   chatBody.style.paddingBottom = (h + 12) + "px";
-  // Place typing indicator above footer
   typingIndicator.style.bottom = (h + 16) + "px";
 }
 
-/* ----------------------
-   Toggle password visibility
-   ---------------------- */
-window.togglePassword = function (id) {
+/* Toggle password visibility (if used) */
+window.togglePassword = function(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.type = el.type === "password" ? "text" : "password";
 };
 
-/* ----------------------
-   Room list / URL handling
-   ---------------------- */
+/* Room list */
+socket.on('room list', rooms => {
+  if (!roomList) return;
+  roomList.innerHTML = '';
+  rooms.forEach(r => {
+    const li = document.createElement('li');
+    li.textContent = r;
+    roomList.appendChild(li);
+  });
+});
+
 function showRoomModal() {
+  if (!roomModal) return;
   roomModal.classList.remove("hidden");
   joinPasswordContainer.classList.add("hidden");
   createSection.style.display = "";
@@ -104,6 +108,7 @@ function showRoomModal() {
 }
 
 function showChatInterface() {
+  if (!chatWrapper) return;
   roomModal.classList.add("hidden");
   usernameModal.classList.add("hidden");
   chatWrapper.classList.remove("hidden");
@@ -111,141 +116,106 @@ function showChatInterface() {
   setTimeout(() => { messageInput.focus(); }, 200);
 }
 
-socket.on("room list", rooms => {
-  roomList.innerHTML = "";
-  rooms.forEach(r => {
-    const li = document.createElement("li");
-    li.textContent = r;
-    roomList.appendChild(li);
-  });
-});
-
-// When page has ?room=roomName, handle differently
-function handleUrlRoomFlow() {
+/* Username flow */
+(function initUsernameFlow() {
+  // handle ?room= param: show username then join-only flow
   const params = new URLSearchParams(window.location.search);
-  const r = params.get("room");
+  const r = params.get('room');
   if (r) {
-    // display username first, then show join password only
     usernameModal.classList.remove("hidden");
     usernameBtn.onclick = () => {
       const name = usernameInput.value.trim();
-      if (!name) return;
+      if (!name) { showToast('Enter name'); return; }
       username = name;
       usernameModal.classList.add("hidden");
       roomModal.classList.remove("hidden");
-      // auto-fill and show join-only
       newRoomInput.value = r;
-      createSection.style.display = "none";
-      newRoomBtn.style.display = "none";
-      joinPasswordContainer.classList.remove("hidden");
-      passwordAlert.classList.add("hidden");
+      createSection.style.display = 'none';
+      newRoomBtn.style.display = 'none';
+      joinPasswordContainer.classList.remove('hidden');
+      passwordAlert.classList.add('hidden');
       joinRoomBtn.onclick = () => {
         const pwd = joinRoomPassword.value.trim();
-        if (!pwd) return;
-        socket.emit("join room request", r, pwd, username);
+        if (!pwd) { showToast('Enter password'); return; }
+        socket.emit('join room request', r, pwd, username);
       };
     };
-    return true;
-  }
-  return false;
-}
-
-/* ----------------------
-   Username flow
-   ---------------------- */
-(function initUsernameFlow() {
-  const urlHandled = handleUrlRoomFlow();
-  if (!urlHandled) {
-    usernameModal.classList.remove("hidden");
-    usernameBtn.onclick = () => {
-      const name = usernameInput.value.trim();
-      if (!name) return;
-      username = name;
-      usernameModal.classList.add("hidden");
-      // show room modal (create/join)
-      showRoomModal();
-      roomModal.classList.remove("hidden");
-    };
-  }
-})();
-
-/* ----------------------
-   Create room
-   ---------------------- */
-newRoomBtn.addEventListener("click", () => {
-  const r = newRoomInput.value.trim();
-  const p = newRoomPassword.value.trim();
-  if (!r || !p) {
-    showToast("Room name and password required");
     return;
   }
-  socket.emit("create room", r, p, username);
+
+  // no URL room
+  usernameModal.classList.remove("hidden");
+  usernameBtn.onclick = () => {
+    const name = usernameInput.value.trim();
+    if (!name) { showToast('Enter name'); return; }
+    username = name;
+    usernameModal.classList.add("hidden");
+    showRoomModal();
+    roomModal.classList.remove("hidden");
+  };
+})();
+
+/* Create room */
+newRoomBtn.addEventListener('click', () => {
+  const r = newRoomInput.value.trim();
+  const p = newRoomPassword.value.trim();
+  if (!r || !p) { showToast('Room name and password required'); return; }
+  socket.emit('create room', r, p, username);
 });
 
-/* ----------------------
-   Click room from list -> join flow
-   ---------------------- */
-roomList.addEventListener("click", e => {
-  if (e.target && e.target.tagName === "LI") {
+/* Click room list join */
+roomList.addEventListener('click', e => {
+  if (e.target && e.target.tagName === 'LI') {
     const selected = e.target.textContent;
-    // show join-only UI
     newRoomInput.value = selected;
-    createSection.style.display = "none";
-    newRoomBtn.style.display = "none";
-    joinPasswordContainer.classList.remove("hidden");
-    passwordAlert.classList.add("hidden");
+    createSection.style.display = 'none';
+    newRoomBtn.style.display = 'none';
+    joinPasswordContainer.classList.remove('hidden');
+    passwordAlert.classList.add('hidden');
     joinRoomBtn.onclick = () => {
       const pwd = joinRoomPassword.value.trim();
-      if (!pwd) return;
-      socket.emit("join room request", selected, pwd, username);
+      if (!pwd) { showToast('Enter password'); return; }
+      socket.emit('join room request', selected, pwd, username);
     };
   }
 });
 
-/* ----------------------
-   Socket responses for room events
-   ---------------------- */
-socket.on("no such room", () => {
-  showToast("Room does not exist");
+/* Room socket responses */
+socket.on('no such room', () => showToast('Room does not exist'));
+socket.on('wrong password', () => {
+  passwordAlert.textContent = 'Incorrect password';
+  passwordAlert.classList.remove('hidden');
 });
-
-socket.on("wrong password", () => {
-  passwordAlert.textContent = "Incorrect password";
-  passwordAlert.classList.remove("hidden");
-});
-
-socket.on("room joined", roomName => {
+socket.on('room joined', roomName => {
   room = roomName;
   chatSubtitle.textContent = `Room: ${room} (${username})`;
   showChatInterface();
   addSystemMessage(`You joined "${room}"`);
 });
 
-/* ----------------------
-   Chat message rendering
-   ---------------------- */
+/* Chat rendering */
 function addSystemMessage(text) {
-  const el = document.createElement("div");
-  el.className = "message system";
-  el.innerHTML = `<em>${text}</em>`;
+  const el = document.createElement('div');
+  el.className = 'message system';
+  el.innerHTML = `<em>${escapeHtml(text)}</em>`;
   chatBody.appendChild(el);
-  chatBody.scrollTop = chatBody.scrollHeight;
+  scrollToBottom();
 }
 
 function addMessage(user, text, timeStamp) {
-  const el = document.createElement("div");
-  el.className = "message " + (user === username ? "user" : "other");
+  const el = document.createElement('div');
+  el.className = 'message ' + (user === username ? 'user' : 'other');
   const time = timeStamp ? formatTime(timeStamp) : formatTime(new Date());
-  el.innerHTML = `<strong>${user}</strong><div>${escapeHtml(text)}</div><div class="timestamp">${time}</div>`;
+  el.innerHTML = `<strong>${escapeHtml(user)}</strong><div>${escapeHtml(text)}</div><div class="timestamp">${time}</div>`;
   chatBody.appendChild(el);
-  chatBody.scrollTop = chatBody.scrollHeight;
+  scrollToBottom();
 }
 
 function addFileMessage(user, data) {
-  const el = document.createElement("div");
-  el.className = "message " + (user === username ? "user" : "other");
-  let content = "";
-  if (data.fileType && data.fileType.startsWith("image/")) {
+  const el = document.createElement('div');
+  el.className = 'message ' + (user === username ? 'user' : 'other');
+  let content = '';
+  if (data.fileType && data.fileType.startsWith('image/')) {
     content = `<img src="${data.fileData}" class="chat-image" alt="${escapeHtml(data.fileName)}">`;
   } else {
     content = `<a href="${data.fileData}" download="${encodeURIComponent(data.fileName)}">${escapeHtml(data.fileName)}</a>`;
@@ -253,183 +223,138 @@ function addFileMessage(user, data) {
   const time = formatTime(new Date());
   el.innerHTML = `<strong>${escapeHtml(user)}</strong><div>${content}</div><div class="timestamp">${time}</div>`;
   chatBody.appendChild(el);
-  chatBody.scrollTop = chatBody.scrollHeight;
+  scrollToBottom();
 }
 
-/* simple escaping */
 function escapeHtml(s) {
-  if (!s) return "";
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  if (!s) return '';
+  return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
-/* ----------------------
-   Socket chat/file/typing handlers
-   ---------------------- */
-socket.on("file message", data => {
-  addFileMessage(data.user || "Unknown", data);
+function scrollToBottom() {
+  // ensure newest message is visible and not hidden behind footer
+  if (!chatBody) return;
+  chatBody.scrollTop = chatBody.scrollHeight - 6;
+}
+
+/* Socket handlers for chat & files */
+socket.on('chat message', data => {
+  if (!data) return;
+  if (data.type === 'text') addMessage(data.user, data.text, data.time);
+  else addMessage(data.user, data.text || '');
+});
+socket.on('file message', data => addFileMessage(data.user || 'Unknown', data));
+
+socket.on('chat history', history => {
+  if (!history || !history.length) return;
+  history.forEach(h => {
+    if (h.type === 'text') addMessage(h.user, h.text, h.time);
+    else addFileMessage(h.user, h);
+  });
 });
 
-socket.on("typing", user => {
+/* Typing indicator */
+socket.on('typing', user => {
   if (user === username) return;
   typingIndicator.textContent = `${user} is typing...`;
-  typingIndicator.classList.remove("hidden");
+  typingIndicator.classList.remove('hidden');
 });
-socket.on("stop typing", user => {
+socket.on('stop typing', user => {
   if (user === username) return;
-  typingIndicator.classList.add("hidden");
+  typingIndicator.classList.add('hidden');
 });
 
-/* ----------------------
-   Send message & input
-   ---------------------- */
-sendBtn.addEventListener("click", () => {
+/* Send message and input */
+sendBtn.addEventListener('click', () => {
   const msg = messageInput.value.trim();
   if (!msg) return;
-  socket.emit("chat message", msg);  // only send
-  messageInput.value = ""; // clear input
-  socket.emit("stop typing", username);
-  //keep keyboard open on mobile
-    if (/Mobi|Android/i.test(navigator.userAgent)) {
-    setTimeout(() => messageInput.focus(), 50); // refocus input
-  }
+  // send to server (server will broadcast and store)
+  socket.emit('chat message', msg);
+  // clear input but keep focus to keep keyboard open on mobile
+  messageInput.value = '';
+  messageInput.focus();
+  socket.emit('stop typing', username);
 });
-
-messageInput.addEventListener("keypress", e => {
-  if (e.key === "Enter") sendBtn.click();
-  else {
-    socket.emit("typing", username);
+messageInput.addEventListener('keypress', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendBtn.click();
+  } else {
+    socket.emit('typing', username);
     clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => socket.emit("stop typing", username), 900);
+    typingTimeout = setTimeout(() => socket.emit('stop typing', username), 900);
   }
 });
 
-/* ----------------------
-   Receive chat message
-   ---------------------- */
-socket.on("chat message", data => {
-  if (!data) return;
-
-  if (typeof data === "string") {
-    addMessage("System", data);
-  } else if (data.user && data.text) {
-    addMessage(data.user, data.text);
-
-    // play sound if tab inactive
-    if (!isTabActive) {
-      const audio = new Audio("notification.mp3");
-      audio.play();
-    }
-
-    // show desktop notification
-    if (!isTabActive && Notification.permission === "granted") {
-      const notification = new Notification(`${data.user} sent a message`, {
-        body: data.text,
-        icon: "logo.png"
-      });
-      notification.onclick = () => window.focus();
-    }
-  }
-});
-
-/* ----------------------
-   File upload
-   ---------------------- */
-fileBtn.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", () => {
+/* File upload */
+fileBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
   const file = fileInput.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
     const data = { fileName: file.name, fileType: file.type, fileData: reader.result };
-    // show locally immediately
+    // show locally
     addFileMessage(username, data);
-    socket.emit("file upload", data);
+    socket.emit('file upload', data);
   };
   reader.readAsDataURL(file);
 });
 
-/* ----------------------
-   Invite modal & copy
-   ---------------------- */
+/* Invite modal copy */
 function setInviteUrl() {
   if (!room) return;
   inviteUrlInput.value = `${window.location.origin}?room=${encodeURIComponent(room)}`;
 }
-
-inviteBtn.addEventListener("click", () => {
+inviteBtn.addEventListener('click', () => {
   setInviteUrl();
-  inviteModal.classList.remove("hidden");
+  inviteModal.classList.remove('hidden');
 });
-closeInvite.addEventListener("click", () => inviteModal.classList.add("hidden"));
-copyBtn.addEventListener("click", async () => {
+closeInvite.addEventListener('click', () => inviteModal.classList.add('hidden'));
+copyBtn.addEventListener('click', async () => {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(inviteUrlInput.value);
     } else {
       inviteUrlInput.select();
       inviteUrlInput.setSelectionRange(0, 99999);
-      document.execCommand("copy");
+      document.execCommand('copy');
     }
-    inviteModal.classList.add("hidden");
-    showToast("Link copied!");
-  } catch (err) {
-    showToast("Copy failed");
+    inviteModal.classList.add('hidden');
+    showToast('Link copied!');
+  } catch {
+    showToast('Copy failed');
   }
 });
 
-/* ----------------------
-   Window resize / padding
-   ---------------------- */
-window.addEventListener("resize", adjustChatPadding);
-window.addEventListener("load", adjustChatPadding);
-
-/* ----------------------
-   Status updates (connection)
-   ---------------------- */
-socket.on("connect_error", () => {
-  statusBar.textContent = "⚠️ Server unreachable — reconnecting...";
-  statusBar.classList.add("show");
+/* Connection status */
+socket.on('connect_error', () => {
+  statusBar.textContent = '⚠️ Server unreachable — reconnecting...';
+  statusBar.classList.add('show');
 });
-socket.on("disconnect", () => {
-  statusBar.textContent = "⚠️ Disconnected — trying to reconnect...";
-  statusBar.classList.add("show");
+socket.on('disconnect', () => {
+  statusBar.textContent = '⚠️ Disconnected — trying to reconnect...';
+  statusBar.classList.add('show');
 });
-socket.on("connect", () => {
-  statusBar.classList.remove("show");
+socket.on('connect', () => {
+  statusBar.classList.remove('show');
 });
 
-/* ----------------------
-   initial padding call
-   ---------------------- */
+/* initial adjustments */
+window.addEventListener('resize', adjustChatPadding);
+window.addEventListener('load', adjustChatPadding);
 setTimeout(adjustChatPadding, 300);
 
-//notification
-if ("Notification" in window) {
-  Notification.requestPermission().then(permission => {
-    console.log("Notification permission:", permission);
-  });
-}
-
-//page visibility that check tab is open or not
-let isTabActive = true;
-
-document.addEventListener("visibilitychange", () => {
-  isTabActive = !document.hidden;
-});
-
-
-
-/* ----------------------
-   Push notifications: register service worker & subscribe
----------------------- */
+/* Notifications (browser) - register service worker & subscribe */
 async function registerForPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.log('Push not supported in this browser.');
+    console.log('Push not supported');
     return;
   }
+
   try {
     const reg = await navigator.serviceWorker.register('/sw.js');
-    console.log('Service worker registered for push:', reg);
+    console.log('Service Worker registered', reg);
 
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
@@ -437,45 +362,179 @@ async function registerForPush() {
       return;
     }
 
-    // fetch public key from server
+    // get vapid public key from server
     const res = await fetch('/vapidPublicKey');
-    const publicKey = await res.text();
-    if (!publicKey) {
-      console.warn('No public VAPID key available from server');
+    const data = await res.json();
+    if (!data.publicKey) {
+      console.warn('No public key from server');
       return;
     }
+    const convertedKey = urlBase64ToUint8Array(data.publicKey);
 
-    const convertedKey = urlBase64ToUint8Array(publicKey);
+    // subscribe
     const subscription = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: convertedKey
     });
 
-    // send subscription to server
+    // send to server
     await fetch('/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(subscription)
     });
-    console.log('Push subscription sent to server');
+
+    hasSubscribedForPush = true;
+    console.log('Subscribed for push');
   } catch (err) {
-    console.error('Failed to register for push', err);
+    console.error('Push registration failed', err);
   }
 }
-
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
 }
 
-// Call registerForPush when user joins a room
+// call push registration after user has entered a username and joined a room
+// so we can ask permission at right time
+// We'll call registerForPush when user joins a room successfully:
 socket.on('room joined', () => {
-  // small delay to ensure modal closed
-  setTimeout(() => { registerForPush(); }, 300);
+  if (!hasSubscribedForPush) registerForPush();
+});
+
+/* Notifications when receiving chat message (in-app)
+   Browser system notifications are handled by the service worker.
+   We still show audio/visual hints here if tab hidden.
+*/
+let isTabActive = true;
+document.addEventListener('visibilitychange', () => { isTabActive = !document.hidden; });
+
+socket.on('chat message', data => {
+  // If message arrived when tab not active and push not delivered (or user didn't subscribe),
+  // the service worker push will handle. For redundancy, play sound or show small toast.
+  if (!isTabActive) {
+    // optionally play a sound or show toast
+  }
+});
+
+/* End of script.js */
+/* --- Invite via SMS (append only) --- */
+/* --- Invite via SMS (updated: sends custom message, not just link) --- */
+(function () {
+  const inviteSmsBtn = document.getElementById("invite-sms-btn");
+
+  if (!inviteSmsBtn) return;
+
+  inviteSmsBtn.addEventListener("click", () => {
+    /* ⭐ CUSTOMIZE YOUR URL HERE ⭐ */
+    const smsCustomUrl = "https://jinnie-chats.com";
+
+    /* ⭐ CUSTOMIZE YOUR MESSAGE HERE ⭐ */
+    const customMessage = 
+      `Hey! I’m using Jinnie Chat — a simple, private realtime chat.\n` +
+      `Join now using this link:\n${smsCustomUrl}\nSee you there!`;
+
+    /* ===============================
+       1. Try Web Share API first
+       =============================== */
+    if (navigator.share) {
+      navigator
+        .share({
+          title: "Join Jinnie Chat",
+          text: customMessage,
+        })
+        .catch(() => {
+          // If user cancels or fails → fallback to SMS
+          const body = encodeURIComponent(customMessage);
+          window.location.href = `sms:?body=${body}`;
+          setTimeout(() => {
+            window.location.href = `sms:&body=${body}`;
+          }, 400);
+        });
+
+      return;
+    }
+
+    /* ===============================
+       2. Fallback: Open SMS composer
+       =============================== */
+    const body = encodeURIComponent(customMessage);
+
+    // Try 1st format
+    window.location.href = `sms:?body=${body}`;
+
+    // Try alternative format (for Samsung, Xiaomi, etc.)
+    setTimeout(() => {
+      window.location.href = `sms:&body=${body}`;
+    }, 400);
+  });
+})();
+
+//share popup 
+/* ================================
+   SHARE OPTIONS - ALL INVITES
+================================= */
+
+const sharePopup = document.getElementById("shareOptionsPopup");
+const shareBtn = document.getElementById("share-options-btn");
+
+const popupWA = document.getElementById("popup-whatsapp");
+const popupTG = document.getElementById("popup-telegram");
+const popupSMS = document.getElementById("popup-sms");
+const popupCOPY = document.getElementById("popup-copy");
+
+function getInviteLink() {
+  const urlInput = document.getElementById("invite-url");
+  return urlInput?.value || window.location.href;
+}
+
+/* --- OPEN SHARE POPUP --- */
+shareBtn.addEventListener("click", () => {
+  sharePopup.classList.add("show");
+  sharePopup.classList.remove("hidden");
+});
+
+/* --- CLOSE POPUP WHEN CLICK CANCEL --- */
+sharePopup.querySelector(".share-cancel").addEventListener("click", () => {
+  sharePopup.classList.remove("show");
+  setTimeout(() => sharePopup.classList.add("hidden"), 300);
+});
+
+/* --- WhatsApp share --- */
+function shareWhatsApp() {
+  const link = getInviteLink();
+  const msg = encodeURIComponent(`Join me on Jinnie Chat:\n${link}`);
+  window.location.href = `https://wa.me/?text=${msg}`;
+}
+popupWA.addEventListener("click", shareWhatsApp);
+document.getElementById("invite-wa-btn").addEventListener("click", shareWhatsApp);
+
+/* --- Telegram share --- */
+function shareTelegram() {
+  const link = getInviteLink();
+  const msg = encodeURIComponent(`Join me on Jinnie Chat:\n${link}`);
+  window.location.href = `https://t.me/share/url?url=${link}&text=${msg}`;
+}
+popupTG.addEventListener("click", shareTelegram);
+document.getElementById("invite-tg-btn").addEventListener("click", shareTelegram);
+
+/* --- SMS share --- */
+function shareSMS() {
+  const link = getInviteLink();
+  const msg = encodeURIComponent(`Hey! Join me on Jinnie Chat:\n${link}`);
+
+  window.location.href = `sms:?body=${msg}`;
+  setTimeout(() => {
+    window.location.href = `sms:&body=${msg}`;
+  }, 300);
+}
+popupSMS.addEventListener("click", shareSMS);
+
+/* --- Copy link --- */
+popupCOPY.addEventListener("click", () => {
+  const link = getInviteLink();
+  navigator.clipboard.writeText(link);
+  alert("Link copied to clipboard!");
 });

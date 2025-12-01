@@ -1,32 +1,24 @@
+// server.js - Express + Socket.IO + Web Push integrated
 require('dotenv').config();
-// server.js
-const express = require("express");
+const express = require('express');
+const path = require('path');
+const webpush = require('web-push');
+const http = require('http');
 const app = express();
-const http = require("http").createServer(app);
-const io = require("socket.io")(http);
-const webpush = require("web-push");
-const basicAuth = require("express-basic-auth");
+const server = http.createServer(app);
+const io = require('socket.io')(server);
 
-app.use(express.static("public"));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-/* ---------- Web Push (VAPID) setup ---------- */
-let VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || null;
-let VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || null;
+// ----- Web Push (VAPID) setup -----
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 
 if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-  try {
-    const keys = require('web-push').generateVAPIDKeys();
-    VAPID_PUBLIC_KEY = keys.publicKey;
-    VAPID_PRIVATE_KEY = keys.privateKey;
-    console.log("Generated temporary VAPID keys. For persistent keys, set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in your environment.");
-    console.log("VAPID_PUBLIC_KEY=" + VAPID_PUBLIC_KEY);
-    console.log("VAPID_PRIVATE_KEY=" + VAPID_PRIVATE_KEY);
-  } catch (e) {
-    console.error("Failed to generate VAPID keys:", e);
-  }
-}
-
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  console.warn('⚠️ VAPID keys not set. Push notifications will NOT work until VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are set.');
+} else {
   webpush.setVapidDetails(
     'mailto:' + (process.env.ADMIN_EMAIL || 'admin@example.com'),
     VAPID_PUBLIC_KEY,
@@ -34,187 +26,199 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   );
 }
 
-// expose public key to clients
-app.get('/vapidPublicKey', (req, res) => {
-  res.send(VAPID_PUBLIC_KEY || '');
-});
-
-// store subscriptions in memory (replace with DB for production)
+// In-memory subscription store. Replace with DB for persistence.
 const subscriptions = [];
 
-app.post('/subscribe', express.json(), (req, res) => {
+// Endpoint: return public VAPID key
+app.get('/vapidPublicKey', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+// Endpoint: client posts a subscription
+app.post('/subscribe', (req, res) => {
   const sub = req.body;
   if (!sub || !sub.endpoint) return res.status(400).json({ error: 'Invalid subscription' });
+
+  // dedupe by endpoint
   if (!subscriptions.find(s => s.endpoint === sub.endpoint)) {
     subscriptions.push(sub);
+    console.log('✅ Added subscription - total:', subscriptions.length);
   }
   res.status(201).json({ success: true });
 });
 
-// basic auth middleware if ADMIN_USER & ADMIN_PASS set
-let adminAuth = (req, res, next) => next();
-if (process.env.ADMIN_USER && process.env.ADMIN_PASS) {
-  adminAuth = basicAuth({
-    users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
-    challenge: true
-  });
-}
+// Admin endpoint to send a custom notification to all subscriptions
+app.post('/send-notification', async (req, res) => {
+  const { title, message, secret } = req.body || {};
 
-// admin send-notification endpoint (protected)
-app.post('/send-notification', adminAuth, express.json(), async (req, res) => {
-  const { title, message } = req.body || {};
+  // basic server-side check using ADMIN_SECRET
+  if (process.env.ADMIN_SECRET && secret !== process.env.ADMIN_SECRET) {
+    return res.status(403).json({ success: false, error: 'Unauthorized' });
+  }
+
   const payload = JSON.stringify({ title: title || 'Update', message: message || '' });
 
-  const failed = [];
-  const promises = subscriptions.map(sub => 
+  const promises = subscriptions.map((sub, idx) =>
     webpush.sendNotification(sub, payload).catch(err => {
-      console.warn('Push send error', err && err.statusCode);
+      // If subscription is invalid, remove it
+      console.warn('Push send error for subscription', idx, err && err.statusCode);
+      // If 410 (gone) or 404, we should remove the subscription
       if (err && (err.statusCode === 410 || err.statusCode === 404)) {
-        failed.push(sub.endpoint);
+        const i = subscriptions.findIndex(s => s.endpoint === sub.endpoint);
+        if (i !== -1) subscriptions.splice(i, 1);
       }
     })
   );
 
   try {
     await Promise.all(promises);
-    // remove failed subscriptions
-    for (const ep of failed) {
-      const i = subscriptions.findIndex(s => s.endpoint === ep);
-      if (i !== -1) subscriptions.splice(i,1);
-    }
-    res.json({ success: true, remaining: subscriptions.length });
-  } catch (e) {
-    console.error('Error sending notifications', e);
+    res.json({ success: true, sent: subscriptions.length });
+  } catch (err) {
+    console.error('Error sending notifications', err);
     res.status(500).json({ success: false, error: 'Failed to send' });
   }
 });
 
-// serve dashboard (admin page) at /dashboard (protected)
-app.get('/dashboard', adminAuth, (req, res) => {
-  res.sendFile(require('path').join(__dirname, 'public', 'admin.html'));
-});
-
-
+// ---------------- Chat logic (rooms, messages) ----------------
 // rooms structure:
-// {
+// rooms = {
 //   roomName: {
-//     password: "pass",
-//     users: [ { username, socketId } ]
+//     password: 'secret',
+//     users: [ { username, socketId } ],
+//     history: [ {user, text, time, type: 'text'|'file'} ]
 //   }
 // }
 const rooms = {};
 
-io.on("connection", socket => {
-  // Send current room list to newcomer
-  socket.emit("room list", Object.keys(rooms));
+function createRoomIfNotExists(roomName, password = '') {
+  if (!rooms[roomName]) {
+    rooms[roomName] = { password, users: [], history: [] };
+    broadcastRoomList();
+  }
+}
 
-  // Create room
-  socket.on("create room", (roomName, password, username) => {
-    if (!roomName || !password || !username) return;
-    if (!rooms[roomName]) {
-      rooms[roomName] = { password, users: [] };
-    }
-    // Save user's room on socket
-    socket.currentRoom = roomName;
-    rooms[roomName].users.push({ username, socketId: socket.id });
-    socket.join(roomName);
+function broadcastRoomList() {
+  io.emit('room list', Object.keys(rooms));
+}
 
-    // Notify creator
-    socket.emit("room joined", roomName);
+// Serve index by default
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-    // Notify others in room
-    socket.to(roomName).emit("chat message", {
-      user: "System",
-      text: `${username} has joined the chat`
-    });
+// Socket.IO handlers
+io.on('connection', socket => {
+  console.log('Socket connected:', socket.id);
 
-    // Broadcast updated room list
-    io.emit("room list", Object.keys(rooms));
+  // request current room list
+  socket.on('get rooms', () => {
+    socket.emit('room list', Object.keys(rooms));
   });
 
-  // Join room (with password)
-  socket.on("join room request", (roomName, password, username) => {
-    if (!roomName || !username) return;
+  socket.on('create room', (roomName, password, username) => {
+    if (!roomName || !password || !username) {
+      socket.emit('error', 'Room name, password and username required');
+      return;
+    }
+    if (rooms[roomName]) {
+      socket.emit('error', 'Room already exists');
+      return;
+    }
+    rooms[roomName] = { password, users: [], history: [] };
+    // add user and join socket room
+    rooms[roomName].users.push({ username, socketId: socket.id });
+    socket.join(roomName);
+    socket.data.username = username;
+    socket.data.room = roomName;
+    broadcastRoomList();
+    // send success
+    socket.emit('room joined', roomName);
+    // notify others
+    socket.to(roomName).emit('chat message', { user: 'System', text: `${username} joined the room.` });
+  });
+
+  socket.on('join room request', (roomName, passwordAttempt, username) => {
     const room = rooms[roomName];
     if (!room) {
-      socket.emit("no such room");
+      socket.emit('no such room');
       return;
     }
-    if (room.password !== password) {
-      socket.emit("wrong password");
+    if (room.password !== passwordAttempt) {
+      socket.emit('wrong password');
       return;
     }
-
-    socket.currentRoom = roomName;
+    // Add user
     room.users.push({ username, socketId: socket.id });
     socket.join(roomName);
+    socket.data.username = username;
+    socket.data.room = roomName;
 
-    socket.emit("room joined", roomName);
-
-    socket.to(roomName).emit("chat message", {
-      user: "System",
-      text: `${username} has joined the chat`
-    });
+    // Send room joined with history
+    socket.emit('room joined', roomName);
+    // send history
+    if (room.history && room.history.length) {
+      socket.emit('chat history', room.history);
+    }
+    // notify others
+    socket.to(roomName).emit('chat message', { user: 'System', text: `${username} joined the room.` });
+    // update room list
+    broadcastRoomList();
   });
 
   // Chat message
-  socket.on("chat message", msg => {
-    const roomName = socket.currentRoom;
-    if (!roomName) return;
-    // find username for this socket
-    const r = rooms[roomName];
-    const userObj = r ? r.users.find(u => u.socketId === socket.id) : null;
-    const username = userObj ? userObj.username : "Unknown";
-
-    io.to(roomName).emit("chat message", { user: username, text: msg });
+  socket.on('chat message', msg => {
+    const username = socket.data.username || 'Unknown';
+    const room = socket.data.room;
+    if (!room) return;
+    const entry = { user: username, text: msg, time: new Date().toISOString(), type: 'text' };
+    // save to history
+    rooms[room].history.push(entry);
+    // emit to room
+    io.to(room).emit('chat message', entry);
   });
 
-  // File upload
-  socket.on("file upload", data => {
-    const roomName = socket.currentRoom;
-    if (!roomName || !data) return;
-    const r = rooms[roomName];
-    const userObj = r ? r.users.find(u => u.socketId === socket.id) : null;
-    const username = userObj ? userObj.username : "Unknown";
-
-    io.to(roomName).emit("file message", { user: username, ...data });
+  // File upload (client sends base64 data)
+  socket.on('file upload', data => {
+    const username = socket.data.username || 'Unknown';
+    const room = socket.data.room;
+    if (!room) return;
+    const entry = { user: username, fileName: data.fileName, fileType: data.fileType, fileData: data.fileData, time: new Date().toISOString(), type: 'file' };
+    rooms[room].history.push(entry);
+    io.to(room).emit('file message', entry);
   });
 
-  // Typing indicators
-  socket.on("typing", username => {
-    const roomName = socket.currentRoom;
-    if (!roomName) return;
-    socket.to(roomName).emit("typing", username);
+  // typing
+  socket.on('typing', user => {
+    const room = socket.data.room;
+    if (!room) return;
+    socket.to(room).emit('typing', user);
   });
-  socket.on("stop typing", username => {
-    const roomName = socket.currentRoom;
-    if (!roomName) return;
-    socket.to(roomName).emit("stop typing", username);
+  socket.on('stop typing', user => {
+    const room = socket.data.room;
+    if (!room) return;
+    socket.to(room).emit('stop typing', user);
   });
 
-  // Disconnect - remove user from rooms; if room empty, remove it
-  socket.on("disconnect", () => {
-    for (const rName of Object.keys(rooms)) {
-      const room = rooms[rName];
-      const before = room.users.length;
+  // disconnect
+  socket.on('disconnect', () => {
+    // remove user from any room
+    const roomName = socket.data.room;
+    const username = socket.data.username;
+    if (roomName && rooms[roomName]) {
+      const room = rooms[roomName];
       room.users = room.users.filter(u => u.socketId !== socket.id);
-      const after = room.users.length;
-      if (before !== after) {
-        // someone removed, notify remaining users
-        io.to(rName).emit("chat message", {
-          user: "System",
-          text: `A user has left the chat`
-        });
-      }
+      socket.to(roomName).emit('chat message', { user: 'System', text: `${username || 'A user'} left the room.` });
       if (room.users.length === 0) {
-        delete rooms[rName];
-        io.emit("room list", Object.keys(rooms));
+        delete rooms[roomName];
+        broadcastRoomList();
       }
     }
+    console.log('Socket disconnected:', socket.id);
   });
 });
 
+// ping route
+app.get('/ping', (req, res) => res.send('pong'));
+
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`Server running on ${PORT}`));
-//ping render server
-app.get("/ping", (req, res) => res.send("pong"));
+server.listen(PORT, () => console.log(`Server running on ${PORT}`));

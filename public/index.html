@@ -86,16 +86,39 @@
   </div>
 
   <!-- Invite Modal -->
-  <div id="inviteModal" class="modal hidden">
-    <div class="modal-card">
-      <button id="close-invite" class="close-btn">✕</button>
-      <h3>Share this link to invite your friend</h3>
-      <input id="invite-url" type="text" readonly />
-      <div style="margin-top:10px">
-        <button id="copy-btn" class="btn">Copy</button>
-      </div>
+  <!-- Invite Modal -->
+<div id="inviteModal" class="modal hidden">
+  <div class="modal-card">
+    <button id="close-invite" class="close-btn">✕</button>
+    <h3>Invite Your Friend</h3>
+
+    <input id="invite-url" type="text" readonly />
+
+    <div style="margin-top:15px; display:flex; gap:10px; flex-direction:column;">
+      <button id="copy-btn" class="btn">Copy Link</button>
+      <button id="invite-sms-btn" class="btn">Invite via SMS</button>
+      <button id="invite-wa-btn" class="btn">Invite via WhatsApp</button>
+      <button id="invite-tg-btn" class="btn">Invite via Telegram</button>
+
+      <!-- Opens share popup -->
+      <button id="share-options-btn" class="btn positive">More Share Options</button>
     </div>
   </div>
+</div>
+
+<!-- Bottom Share Options Popup -->
+<div id="shareOptionsPopup" class="share-popup hidden">
+  <div class="popup-card">
+    <h3>Share via</h3>
+
+    <button class="share-option" id="popup-whatsapp">📱 WhatsApp</button>
+    <button class="share-option" id="popup-telegram">📨 Telegram</button>
+    <button class="share-option" id="popup-sms">📩 SMS</button>
+    <button class="share-option" id="popup-copy">🔗 Copy Link</button>
+
+    <button class="share-cancel">Cancel</button>
+  </div>
+</div>
 
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>

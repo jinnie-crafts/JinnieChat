@@ -1,3 +1,4 @@
+// sw.js - service worker to show notifications
 self.addEventListener('push', function(event) {
   let data = { title: 'Notification', message: 'You have a new message' };
   if (event.data) {
@@ -7,23 +8,23 @@ self.addEventListener('push', function(event) {
       data.message = event.data.text();
     }
   }
-
   const options = {
     body: data.message,
-    icon: '/jinnie-chats.png',    // change to your icon path in public
-    badge: '/jinnie-chats.png'
+    icon: '/jinnie-chats.png',
+    badge: '/jinnie-chats.png',
+    vibrate: [100, 50, 100],
+    data: { url: data.url || '/' }
   };
-
   event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
-// Optional: click behavior
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  event.waitUntil(clients.matchAll({ type: "window" }).then(clientList => {
-    if (clientList.length > 0) {
-      return clientList[0].focus();
+  event.waitUntil(clients.matchAll({ type: 'window' }).then(windowClients => {
+    for (let i = 0; i < windowClients.length; i++) {
+      const client = windowClients[i];
+      if ('focus' in client) return client.focus();
     }
-    return clients.openWindow('/');
+    if (clients.openWindow) return clients.openWindow('/');
   }));
 });

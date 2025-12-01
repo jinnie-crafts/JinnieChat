@@ -148,3 +148,63 @@ hr { border: none; border-top:1px solid #eee; margin:12px 0; }
   border-top: 1px solid #ddd;
   box-sizing: border-box;
 }
+
+
+
+/*share button*/
+/* SHARE POPUP */
+.share-popup {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: -100%;
+  background: rgba(0,0,0,0.45);
+  height: 100vh;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  transition: all .35s ease;
+  z-index: 5000;
+}
+
+.share-popup.show {
+  bottom: 0;
+}
+
+.popup-card {
+  width: 100%;
+  background: #fff;
+  padding: 18px;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 20px rgba(0,0,0,0.15);
+  text-align: center;
+}
+
+.popup-card h3 {
+  margin-bottom: 15px;
+  font-size: 18px;
+}
+
+.share-option {
+  width: 100%;
+  background: #f3f3f3;
+  border: none;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.share-option:hover {
+  background: #e8e8e8;
+}
+
+.share-cancel {
+  margin-top: 8px;
+  width: 100%;
+  padding: 12px;
+  background: #ff4d4d;
+  color: white;
+  border: none;
+  border-radius: 10px;
+}
