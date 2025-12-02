@@ -112,7 +112,26 @@ hr { border: none; border-top:1px solid #eee; margin:12px 0; }
 .timestamp { display:block; font-size:11px; color:#7a7a7a; margin-top:6px; text-align:right; }
 
 /* footer (input) - fixed centered */
-.chat-footer { position:fixed; bottom:12px; left:50%; transform:translateX(-50%); width:100%; max-width:420px; display:flex; gap:8px; align-items:center; padding:10px; background:rgba(255,255,255,0.95); border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.08); z-index:160; }
+.chat-footer {
+  position: fixed;
+  bottom: 0; /* we'll use safe-area padding below */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  /* Make it fully opaque and elevated */
+  background: #ffffff;              /* solid white avoids underlying dark scrim showing through */
+  box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+  border-radius: 12px 12px 0 0;
+  z-index: 99999 !important;        /* force it above overlays/nav bars */
+  pointer-events: auto;
+  /* respect iPhone notch and Android soft nav: add safe bottom inset */
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
 #message-input { flex:1; padding:12px 14px; border-radius:20px; border:1px solid #ddd; font-size:14px; }
 .chat-actions { display:flex; gap:8px; align-items:center; }
 .circle-btn { width:44px; height:44px; border-radius:50%; border:none; background:var(--green); color:#fff; cursor:pointer; font-weight:700; display:flex; align-items:center; justify-content:center; }
