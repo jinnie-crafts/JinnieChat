@@ -1,0 +1,210 @@
+/* BASE STYLES & LAYOUT */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f0f2f5;
+    padding: 0px;
+    padding-bottom: 50px;
+    /* min-height: 200vh; */
+    /* FIX: Prevents horizontal scrollbar that can trigger when fixed elements are mispositioned */
+    overflow-x: hidden; 
+    overflow-y: auto;
+    overscroll-behavior: none;
+}
+
+/* --- DRAGGABLE SIDEWAYS TAB --- */
+#feedback-tab {
+    contain: layout paint;
+    position: fixed; 
+    /* Use right and top for initial reliable position (will be updated by JS on drag/stop) */
+    right: 1px;
+    top: 60%; 
+    
+    /* Keep the rotation and adjustment */
+    transform: translateY(-50%) rotate(90deg);
+    transform-origin: 100% 0; /* Important for the rotation */
+    background-color: #00c853; 
+    color: white;
+    padding: 8px 18px;
+    border-radius: 0 0 5px 5px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: grab;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+#feedback-tab:hover { background-color: #00a544; }
+#feedback-tab:active { cursor: grabbing; }
+
+/* --- MAIN MODAL POPUP STYLES --- */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+    align-items: center;
+    justify-content: center;
+}
+.modal.active { display: flex; }
+.modal-content {
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    width: 90%;
+    max-width: 380px;
+    position: relative;
+    animation: fadeIn 0.3s;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- CONFIRMATION POPUP STYLES (NEW) --- */
+#confirmation-modal .modal-content {
+    text-align: center;
+    padding: 30px;
+}
+#confirmation-modal .icon-success {
+    font-size: 50px;
+    color: #00c853;
+    margin-bottom: 15px;
+}
+#confirmation-modal h3 {
+    color: #333;
+    margin-top: 0;
+    font-size: 1.5em;
+}
+#confirmation-modal p {
+    color: #777;
+    margin-bottom: 20px;
+}
+#confirmation-modal .close-btn {
+    background-color: #00c853;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+}
+
+/* --- HEADER & MENU STYLES (UNCHANGED) --- */
+.fd-header {
+    background-color: #00c853;
+    color: white;
+    padding: 15px 25px;
+    display: flex;
+    align-items: center;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+.logo-circle {
+    width: 25px; height: 25px; border: 2px solid white; border-radius: 50%;
+    margin-right: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold;
+}
+.fd-header h2 { margin: 0; font-size: 1.2em; font-weight: 500; }
+.menu { list-style: none; padding: 0; margin: 0; }
+.menu-item {
+    display: flex; align-items: center; padding: 20px 25px; border-bottom: 1px solid #eee;
+    cursor: pointer; transition: background-color 0.2s;
+}
+.menu-item:hover { background-color: #f8f8f8; }
+.icon {
+    font-size: 30px; color: #00c853; margin-right: 20px; width: 30px; text-align: center;
+}
+.text-content { flex-grow: 1; }
+.text-content h3 { margin: 0; font-size: 1.1em; color: #333; font-weight: 600; }
+.text-content p { margin: 5px 0 0; font-size: 0.9em; color: #777; }
+
+/* --- INTERNAL PAGES STYLES (UNCHANGED) --- */
+.internal-page { padding: 25px; display: none; }
+.internal-page h3 {
+    color: #00c853; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0;
+}
+.internal-page .back-btn {
+    font-size: 0.9em; color: #00c853; cursor: pointer; display: block; margin-bottom: 15px;
+}
+.internal-page label { display: block; margin-top: 15px; margin-bottom: 5px; font-weight: 600; }
+.internal-page input[type="email"],
+.internal-page textarea {
+    width: calc(100% - 20px); padding: 10px; border: 1px solid #ccc; border-radius: 4px;
+    box-sizing: border-box; resize: vertical;
+}
+.internal-page button {
+    background-color: #00c853; color: white; padding: 10px 15px; border: none; border-radius: 4px;
+    cursor: pointer; margin-top: 20px; width: 100%; font-size: 1em; transition: background-color 0.2s;
+}
+
+/*input section text field stylying*/
+/* --- Input Field and Text Area Decoration --- */
+
+/* Selects all text inputs and textareas within the internal pages */
+.internal-page input[type="text"],
+.internal-page input[type="email"],
+.internal-page textarea {
+    /* 1. Reset and Sizing */
+    width: 100%; /* Make it full width of the container */
+    padding: 12px; /* Good vertical and horizontal spacing */
+    
+    /* 2. Modern Borders */
+    border: 1px solid #dcdfe6; /* Light gray border for a modern look */
+    border-radius: 6px; /* Slightly rounded corners */
+    box-sizing: border-box; /* Ensures padding doesn't increase total width */
+    transition: border-color 0.3s, box-shadow 0.3s; /* Smooth transition for focus effect */
+    font-size: 1em; /* Ensures text size is readable */
+    color: #333; /* Dark text color */
+}
+
+/* Ensure textarea can be resized vertically but not horizontally */
+.internal-page textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+/* 3. Focus Effect (Most Important Decoration) */
+.internal-page input:focus,
+.internal-page textarea:focus {
+    border-color: #00c853; /* Change border color to the brand green */
+    outline: none; /* Remove default browser focus outline */
+    box-shadow: 0 0 0 3px rgba(0, 200, 83, 0.2); /* Subtle green glow */
+    background-color: #ffffff;
+}
+
+/* 4. Placeholder Text Styling (Optional but nice touch) */
+.internal-page ::placeholder {
+    color: #a0a4a8; /* Lighter color for placeholder text */
+    opacity: 1; /* Ensure compatibility across browsers */
+}
+
+/* --- Submission Button Enhancement --- */
+
+.internal-page button[type="submit"] {
+    /* Existing color and size are good, just adding slight lift */
+    background-color: #00c853;
+    color: white;
+    padding: 12px 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 25px; /* Slightly more space above the button */
+    width: 100%;
+    font-size: 1.1em;
+    font-weight: 600; /* Makes the text pop */
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.internal-page button[type="submit"]:hover {
+    background-color: #00a544;
+}
+
+.internal-page button[type="submit"]:active {
+    transform: translateY(1px); /* Slight press down effect */
+}
+        /**/
