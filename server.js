@@ -1,3 +1,33 @@
+import express from "express";
+import path from "path";
+
+const app = express();
+const __dirname = path.resolve();
+
+app.use(express.static("public"));
+
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
+app.listen(process.env.PORT || 3000);
+
+function auth(req, res, next) {
+  const user = basicAuth(req);
+
+  if (
+    !user ||
+    user.name !== process.env.ADMIN_USER ||
+    user.pass !== process.env.ADMIN_PASS
+  ) {
+    res.set("WWW-Authenticate", 'Basic realm="Admin"');
+    return res.status(401).send("Authentication required");
+  }
+
+  next();
+}
+
+
 // server.js - Express + Socket.IO + Web Push integrated
 require('dotenv').config();
 const express = require('express');
@@ -222,3 +252,4 @@ app.get('/ping', (req, res) => res.send('pong'));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on ${PORT}`));
+
